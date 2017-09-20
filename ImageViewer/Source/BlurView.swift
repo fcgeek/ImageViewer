@@ -8,24 +8,25 @@
 
 import UIKit
 
-class BlurView: UIView {
+open class BlurView: UIView {
 
-    var blurPresentDuration: TimeInterval = 0.5
-    var blurPresentDelay: TimeInterval = 0
 
-    var colorPresentDuration: TimeInterval = 0.25
-    var colorPresentDelay: TimeInterval = 0
+    public var blurPresentDuration: TimeInterval = 0.5
+    public var blurPresentDelay: TimeInterval = 0
 
-    var blurDismissDuration: TimeInterval = 0.1
-    var blurDismissDelay: TimeInterval = 0.4
+    public var colorPresentDuration: TimeInterval = 0.25
+    public var colorPresentDelay: TimeInterval = 0
 
-    var colorDismissDuration: TimeInterval = 0.45
-    var colorDismissDelay: TimeInterval = 0
+    public var blurDismissDuration: TimeInterval = 0.1
+    public var blurDismissDelay: TimeInterval = 0.4
 
-    var blurTargetOpacity: CGFloat = 1
-    var colorTargetOpacity: CGFloat = 1
+    public var colorDismissDuration: TimeInterval = 0.45
+    public var colorDismissDelay: TimeInterval = 0
 
-    var overlayColor = UIColor.black {
+    public var blurTargetOpacity: CGFloat = 1
+    public var colorTargetOpacity: CGFloat = 1
+
+    public var overlayColor = UIColor.black {
         didSet { colorView.backgroundColor = overlayColor }
     }
 
@@ -50,11 +51,11 @@ class BlurView: UIView {
         blurringViewContainer.addSubview(blurringView)
         self.addSubview(colorView)
     }
-
+    
     @available (iOS, unavailable)
-    required init?(coder aDecoder: NSCoder) { fatalError() }
-
-    override func layoutSubviews() {
+    required public init?(coder aDecoder: NSCoder) { fatalError() }
+    
+    override open func layoutSubviews() {
         super.layoutSubviews()
 
         blurringViewContainer.frame = self.bounds

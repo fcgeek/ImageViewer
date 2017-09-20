@@ -17,12 +17,12 @@ class ThumbnailsViewController: UICollectionViewController, UICollectionViewDele
 
     var onItemSelected: ((Int) -> Void)?
     let layout = UICollectionViewFlowLayout()
-    weak var itemsDataSource: GalleryItemsDataSource!
+    weak var itemsDatasource: GalleryItemsDatasource!
     var closeButton: UIButton?
     var closeLayout: ButtonLayout?
 
-    required init(itemsDataSource: GalleryItemsDataSource) {
-        self.itemsDataSource = itemsDataSource
+    required init(itemsDatasource: GalleryItemsDatasource) {
+        self.itemsDatasource = itemsDatasource
 
         super.init(collectionViewLayout: layout)
 
@@ -37,7 +37,7 @@ class ThumbnailsViewController: UICollectionViewController, UICollectionViewDele
         NotificationCenter.default.removeObserver(self)
     }
 
-    func rotate() {
+    @objc func rotate() {
         guard UIApplication.isPortraitOnly else { return }
 
         guard UIDevice.current.orientation.isFlat == false &&
@@ -90,44 +90,34 @@ class ThumbnailsViewController: UICollectionViewController, UICollectionViewDele
         self.view.addSubview(closeButton)
     }
 
-    func close() {
+    @objc func close() {
         self.dismiss(animated: true, completion: nil)
     }
 
     override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return itemsDataSource.itemCount()
+        return itemsDatasource.itemCount()
     }
 
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-
+        
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: reuseIdentifier, for: indexPath) as! ThumbnailCell
-
-        let item = itemsDataSource.provideGalleryItem((indexPath as NSIndexPath).row)
+        
+        let item = itemsDatasource.provideGalleryItem((indexPath as NSIndexPath).row)
 
         switch item {
-
+            
         case .image(let fetchImageBlock):
-
+            
             fetchImageBlock() { image in
-
+                
                 if let image = image {
-
+                    
                     cell.imageView.image = image
                 }
             }
-
+            
         case .video(let fetchImageBlock, _):
-
-            fetchImageBlock() { image in
-
-                if let image = image {
-
-                    cell.imageView.image = image
-                }
-            }
-
-        case .custom(let fetchImageBlock, _):
-
+            
             fetchImageBlock() { image in
 
                 if let image = image {
@@ -136,7 +126,7 @@ class ThumbnailsViewController: UICollectionViewController, UICollectionViewDele
                 }
             }
         }
-
+        
         return cell
     }
 

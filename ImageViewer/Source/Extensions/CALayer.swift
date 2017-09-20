@@ -17,7 +17,8 @@ extension CALayer {
         self.render(in: context!)
         let image = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
-
+        
         return image!
     }
 }
+        

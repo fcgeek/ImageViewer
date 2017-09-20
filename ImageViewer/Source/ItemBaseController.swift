@@ -13,20 +13,19 @@ public protocol ItemView {
     var image: UIImage? { get set }
 }
 
-open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGestureRecognizerDelegate, UIScrollViewDelegate where T: ItemView {
+class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGestureRecognizerDelegate, UIScrollViewDelegate where T: ItemView {
 
     //UI
-    public var itemView = T()
+    var itemView = T()
     let scrollView = UIScrollView()
-    let activityIndicatorView = UIActivityIndicatorView(activityIndicatorStyle: .white)
 
     //DELEGATE / DATASOURCE
-    weak public var delegate:                 ItemControllerDelegate?
-    weak public var displacedViewsDataSource: GalleryDisplacedViewsDataSource?
+    weak var delegate: ItemControllerDelegate?
+    weak var displacedViewsDatasource: GalleryDisplacedViewsDatasource?
 
     //STATE
-    public let index: Int
-    public var isInitialController = false
+    let index: Int
+    var isInitialController = false
     let itemCount: Int
     var swipingToDismiss: SwipeToDismiss?
     fileprivate var isAnimating = false
@@ -46,11 +45,10 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
     fileprivate var thresholdVelocity: CGFloat = 500 // The speed of swipe needs to be at least this amount of pixels per second for the swipe to finish dismissal.
     fileprivate var displacementKeepOriginalInPlace = false
     fileprivate var displacementInsetMargin: CGFloat = 50
-    fileprivate var swipeToDismissMode = GallerySwipeToDismissMode.always
-    fileprivate var toggleDecorationViewBySingleTap = true
 
     /// INTERACTIONS
-    fileprivate var singleTapRecognizer: UITapGestureRecognizer?
+    fileprivate let singleTapRecognizer = UITapGestureRecognizer()
+    fileprivate let longPressRecognizer = UILongPressGestureRecognizer()
     fileprivate let doubleTapRecognizer = UITapGestureRecognizer()
     fileprivate let swipeToDismissRecognizer = UIPanGestureRecognizer()
 
@@ -60,7 +58,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
     // MARK: - Initializers
 
-    public init(index: Int, itemCount: Int, fetchImageBlock: @escaping FetchImageBlock, configuration: GalleryConfiguration, isInitialController: Bool = false) {
+    init(index: Int, itemCount: Int, fetchImageBlock: @escaping FetchImageBlock, configuration: GalleryConfiguration, isInitialController: Bool = false) {
 
         self.index = index
         self.itemCount = itemCount
@@ -78,14 +76,10 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
             case .displacementDuration(let duration):               displacementDuration = duration
             case .reverseDisplacementDuration(let duration):        reverseDisplacementDuration = duration
             case .displacementTimingCurve(let curve):               displacementTimingCurve = curve
-            case .maximumZoomScale(let scale):                      maximumZoomScale = scale
+            case .maximumZoolScale(let scale):                      maximumZoomScale = scale
             case .itemFadeDuration(let duration):                   itemFadeDuration = duration
             case .displacementKeepOriginalInPlace(let keep):        displacementKeepOriginalInPlace = keep
             case .displacementInsetMargin(let margin):              displacementInsetMargin = margin
-            case .swipeToDismissMode(let mode):                     swipeToDismissMode = mode
-            case .toggleDecorationViewsBySingleTap(let enabled):    toggleDecorationViewBySingleTap = enabled
-            case .spinnerColor(let color):                          activityIndicatorView.color = color
-            case .spinnerStyle(let style):                          activityIndicatorView.activityIndicatorViewStyle = style
 
             case .displacementTransitionStyle(let style):
 
@@ -107,12 +101,10 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
         configureScrollView()
         configureGestureRecognizers()
-
-        activityIndicatorView.hidesWhenStopped = true
     }
 
     @available (*, unavailable)
-    required public init?(coder aDecoder: NSCoder) { fatalError() }
+    required init?(coder aDecoder: NSCoder) { fatalError() }
 
     deinit {
 
@@ -138,95 +130,71 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
     func configureGestureRecognizers() {
 
+        singleTapRecognizer.addTarget(self, action: #selector(scrollViewDidSingleTap))
+        singleTapRecognizer.numberOfTapsRequired = 1
+        scrollView.addGestureRecognizer(singleTapRecognizer)
+
         doubleTapRecognizer.addTarget(self, action: #selector(scrollViewDidDoubleTap(_:)))
         doubleTapRecognizer.numberOfTapsRequired = 2
         scrollView.addGestureRecognizer(doubleTapRecognizer)
 
-        if toggleDecorationViewBySingleTap == true {
+        singleTapRecognizer.require(toFail: doubleTapRecognizer)
 
-            let singleTapRecognizer = UITapGestureRecognizer()
-
-            singleTapRecognizer.addTarget(self, action: #selector(scrollViewDidSingleTap))
-            singleTapRecognizer.numberOfTapsRequired = 1
-            scrollView.addGestureRecognizer(singleTapRecognizer)
-            singleTapRecognizer.require(toFail: doubleTapRecognizer)
-
-            self.singleTapRecognizer = singleTapRecognizer
-        }
-
-        if swipeToDismissMode != .never {
-
-            swipeToDismissRecognizer.addTarget(self, action: #selector(scrollViewDidSwipeToDismiss))
-            swipeToDismissRecognizer.delegate = self
-            view.addGestureRecognizer(swipeToDismissRecognizer)
-            swipeToDismissRecognizer.require(toFail: doubleTapRecognizer)
-        }
+        swipeToDismissRecognizer.addTarget(self, action: #selector(scrollViewDidSwipeToDismiss))
+        swipeToDismissRecognizer.delegate = self
+        view.addGestureRecognizer(swipeToDismissRecognizer)
+        
+        longPressRecognizer.addTarget(self, action: #selector(scrollViewDidLongPress))
+        scrollView.addGestureRecognizer(longPressRecognizer)
     }
 
     fileprivate func createViewHierarchy() {
 
         self.view.addSubview(scrollView)
         scrollView.addSubview(itemView)
-
-        activityIndicatorView.startAnimating()
-        view.addSubview(activityIndicatorView)
     }
 
     // MARK: - View Controller Lifecycle
 
-    override open func viewDidLoad() {
+    override func viewDidLoad() {
         super.viewDidLoad()
 
         createViewHierarchy()
-
-        fetchImage()
-    }
-
-    public func fetchImage() {
-
-        fetchImageBlock { [weak self] image in
+        
+        fetchImageBlock { [weak self] image in //DON'T Forget offloading the main thread
 
             if let image = image {
 
-                DispatchQueue.main.async {
-                    self?.activityIndicatorView.stopAnimating()
+                self?.itemView.image = image
 
-                    var itemView = self?.itemView
-                    itemView?.image = image
-                    itemView?.isAccessibilityElement = image.isAccessibilityElement
-                    itemView?.accessibilityLabel = image.accessibilityLabel
-                    itemView?.accessibilityTraits = image.accessibilityTraits
-
-                    self?.view.setNeedsLayout()
-                    self?.view.layoutIfNeeded()
-                }
+                self?.view.setNeedsLayout()
+                self?.view.layoutIfNeeded()
             }
         }
     }
 
-    override open func viewWillAppear(_ animated: Bool) {
+    override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
 
         self.delegate?.itemControllerWillAppear(self)
     }
 
-    override open func viewDidAppear(_ animated: Bool) {
+    override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
         self.delegate?.itemControllerDidAppear(self)
     }
 
-    override open func viewWillDisappear(_ animated: Bool) {
+    override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
 
         self.delegate?.itemControllerWillDisappear(self)
     }
 
-    override open func viewDidLayoutSubviews() {
+    override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
         scrollView.frame = self.view.bounds
-        activityIndicatorView.center = view.boundsCenter
 
         if let size = itemView.image?.size , size != CGSize.zero {
 
@@ -239,24 +207,24 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
         }
     }
 
-    public func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
 
         return itemView
     }
 
     // MARK: - Scroll View delegate methods
 
-    public func scrollViewDidZoom(_ scrollView: UIScrollView) {
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
 
         itemView.center = contentCenter(forBoundingSize: scrollView.bounds.size, contentSize: scrollView.contentSize)
     }
 
-    func scrollViewDidSingleTap() {
+    @objc func scrollViewDidSingleTap() {
 
         self.delegate?.itemControllerDidSingleTap(self)
     }
 
-    func scrollViewDidDoubleTap(_ recognizer: UITapGestureRecognizer) {
+    @objc func scrollViewDidDoubleTap(_ recognizer: UITapGestureRecognizer) {
 
         let touchPoint = recognizer.location(ofTouch: 0, in: itemView)
         let aspectFillScale = aspectFillZoomScale(forBoundingSize: scrollView.bounds.size, contentSize: itemView.bounds.size)
@@ -277,8 +245,15 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
                 })
         }
     }
+    
+    @objc func scrollViewDidLongPress(_ recognizer: UITapGestureRecognizer) {
+        delegate?.itemControllerDidLongPress(self)
+    }
 
-    func scrollViewDidSwipeToDismiss(_ recognizer: UIPanGestureRecognizer) {
+    @objc func scrollViewDidSwipeToDismiss(_ recognizer: UIPanGestureRecognizer) {
+
+        /// a swipe gesture on image view that has no image (it was not yet loaded,so we see a spinner) doesn't make sense
+        guard itemView.image != nil else {  return }
 
         /// A deliberate UX decision...you have to zoom back in to scale 1 to be able to swipe to dismiss. It is difficult for the user to swipe to dismiss from images larger then screen bounds because almost all the time it's not swiping to dismiss but instead panning a zoomed in picture on the canvas.
         guard scrollView.zoomScale == scrollView.minimumZoomScale else { return }
@@ -340,7 +315,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
             UIApplication.applicationWindow.windowLevel = UIWindowLevelNormal
             self?.swipingToDismiss = nil
-            self?.delegate?.itemControllerDidFinishSwipeToDismissSuccessfully()
+            self?.delegate?.itemControllerDidFinishSwipeToDismissSuccesfully()
         }
 
         switch (swipeOrientation, index) {
@@ -378,7 +353,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
                                                                   escapeVelocity: velocity.x,
                                                                   completion: swipeToDismissCompletionBlock)
 
-        ///If none of the above select cases, we cancel.
+        ///If nonoe of the above select cases, we cancel.
         default:
 
             swipeToDismissTransition?.cancelTransition() { [weak self] in
@@ -410,27 +385,27 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
                 self?.isAnimating = false
             }
-        })
+        }) 
     }
 
     // MARK: - Present/Dismiss transitions
 
-    public func presentItem(alongsideAnimation: () -> Void, completion: @escaping () -> Void) {
+    func presentItem(alongsideAnimation: () -> Void, completion: @escaping () -> Void) {
 
         guard isAnimating == false else { return }
         isAnimating = true
 
         alongsideAnimation()
 
-        if var displacedView = displacedViewsDataSource?.provideDisplacementItem(atIndex: index),
+        if var displacedView = displacedViewsDatasource?.provideDisplacementItem(atIndex: index),
             let image = displacedView.image {
 
             if presentationStyle == .displacement {
 
-                //Prepare the animated imageView
+                //Prepare the animated imageview
                 let animatedImageView = displacedView.imageView()
 
-                //rotate the imageView to starting angle
+                //rotate the imageview to starting angle
                 if UIApplication.isPortraitOnly == true {
                     animatedImageView.transform = deviceRotationTransform()
                 }
@@ -450,7 +425,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
                     if UIApplication.isPortraitOnly == true {
                         animatedImageView.transform = CGAffineTransform.identity
                     }
-                    /// Animate it into the center (with optionally rotating) - that basically includes changing the size and position
+                    /// Animate it into the center (with optionaly rotating) - that basically includes changing the size and position
 
                     animatedImageView.bounds.size = self?.displacementTargetSize(forSize: image.size) ?? image.size
                     animatedImageView.center = self?.view.boundsCenter ?? CGPoint.zero
@@ -460,7 +435,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
                         self?.itemView.isHidden = false
                         displacedView.hidden = false
                         animatedImageView.removeFromSuperview()
-
+                        
                         self?.isAnimating = false
                         completion()
                     })
@@ -480,7 +455,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
             completion()
             self?.isAnimating = false
-            })
+            }) 
         }
     }
 
@@ -493,7 +468,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
     func findVisibleDisplacedView() -> DisplaceableView? {
 
-        guard let displacedView = displacedViewsDataSource?.provideDisplacementItem(atIndex: index) else { return nil }
+        guard let displacedView = displacedViewsDatasource?.provideDisplacementItem(atIndex: index) else { return nil }
 
         let displacedViewFrame = displacedView.frameInCoordinatesOfScreen()
         let validAreaFrame = self.view.frame.insetBy(dx: displacementInsetMargin, dy: displacementInsetMargin)
@@ -502,7 +477,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
         return isVisibleEnough ? displacedView : nil
     }
 
-    public func dismissItem(alongsideAnimation: () -> Void, completion: @escaping () -> Void) {
+    func dismissItem(alongsideAnimation: () -> Void, completion: @escaping () -> Void) {
 
         guard isAnimating == false else { return }
         isAnimating = true
@@ -514,7 +489,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
         case .displacement:
 
             if var displacedView = self.findVisibleDisplacedView() {
-
+                
                 if displacementKeepOriginalInPlace == false {
                     displacedView.hidden = true
                 }
@@ -524,10 +499,8 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
                     self?.scrollView.zoomScale = 1
 
                     //rotate the image view
-                    if UIApplication.isPortraitOnly == true {
-                        self?.itemView.transform = deviceRotationTransform()
-                    }
-                    
+                    self?.itemView.transform = deviceRotationTransform()
+
                     //position the image view to starting center
                     self?.itemView.bounds = displacedView.bounds
                     self?.itemView.center = displacedView.convertPoint(displacedView.boundsCenter, toView: self!.view)
@@ -538,7 +511,7 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
                         self?.isAnimating = false
                         displacedView.hidden = false
-
+                        
                         completion()
                 })
             }
@@ -555,17 +528,17 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
 
                 self?.isAnimating = false
                 completion()
-            })
+            }) 
         }
     }
 
-    // MARK: - Arcane stuff
+    // MARK: - Arkane stuff
 
-    /// This resolves which of the two pan gesture recognizers should kick in. There is one built in the GalleryViewController (as it is a UIPageViewController subclass), and another one is added as part of item controller. When we pan, we need to decide whether it constitutes a horizontal paging gesture, or a horizontal swipe-to-dismiss gesture.
+    ///This resolves which of the two pan gesture recognizers should kick in. There is one built in the GalleryViewController (as it is a UIPageViewController subclass), and another one is added as part of item controller. When we pan, we need to decide whether it constitutes a horizontal paging gesture, or a horizontal swipe-to-dismiss gesture.
     /// All the logic is from the perspective of SwipeToDismissRecognizer - should it kick in (or let the paging recognizer page)?
-    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
 
-        /// We only care about the swipe to dismiss gesture recognizer, not the built-in pan recognizer that handles paging.
+        /// We only care about the swipe to dismiss gesture recognizer, not the built-in pan recogizner that handles paging.
         guard gestureRecognizer == swipeToDismissRecognizer else { return false }
 
         /// The velocity vector will help us make the right decision
@@ -574,45 +547,41 @@ open class ItemBaseController<T: UIView>: UIViewController, ItemController, UIGe
         guard velocity.orientation != .none else { return false }
 
         /// We continue if the swipe is horizontal, otherwise it's Vertical and it is swipe to dismiss.
-        guard velocity.orientation == .horizontal else { return swipeToDismissMode.contains(.vertical) }
+        guard velocity.orientation == .horizontal else { return true }
 
-        /// A special case for horizontal "swipe to dismiss" is when the gallery has carousel mode OFF, then it is possible to reach the beginning or the end of image set while paging. Paging will stop at index = 0 or at index.max. In this case we allow to jump out from the gallery also via horizontal swipe to dismiss.
+        /// A special case for horizontal "swipe to dismiss" is when the gallery has carousel mode OFF, then it is possible to reach the beginning or the end of image set while paging. PAging will stop at index = 0 or at index.max. In this case we allow to jump out from the gallery also via horizontal swipe to dismiss.
         if (self.index == 0 && velocity.direction == .right) || (self.index == self.itemCount - 1 && velocity.direction == .left) {
-
-            return (pagingMode == .standard && swipeToDismissMode.contains(.horizontal))
+            
+            return (pagingMode == .standard)
         }
-
+        
         return false
     }
-
-    // Reports the continuous progress of Swipe To Dismiss to the Gallery View Controller
-    override open func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-
-        guard let swipingToDismissInProgress = swipingToDismiss else { return }
+    
+    //Reports the continuous progress of Swipe To Dismiss to the  Gallery View Controller
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        
+        guard let swipingToDissmissInProgress = swipingToDismiss else { return }
         guard keyPath == "contentOffset" else { return }
-
+        
         let distanceToEdge: CGFloat
         let percentDistance: CGFloat
-
-        switch swipingToDismissInProgress {
-
+        
+        switch swipingToDissmissInProgress {
+            
         case .horizontal:
-
+            
             distanceToEdge = (scrollView.bounds.width / 2) + (itemView.bounds.width / 2)
             percentDistance = fabs(scrollView.contentOffset.x / distanceToEdge)
-
+            
         case .vertical:
-
+            
             distanceToEdge = (scrollView.bounds.height / 2) + (itemView.bounds.height / 2)
             percentDistance = fabs(scrollView.contentOffset.y / distanceToEdge)
         }
-
+        
         if let delegate = self.delegate {
             delegate.itemController(self, didSwipeToDismissWithDistanceToEdge: percentDistance)
         }
-    }
-
-    public func closeDecorationViews(_ duration: TimeInterval) {
-        // stub
     }
 }

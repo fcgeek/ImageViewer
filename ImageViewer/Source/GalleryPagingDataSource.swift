@@ -1,5 +1,5 @@
 //
-//  GalleryPagingDataSource.swift
+//  GalleryPagingDatasource.swift
 //  ImageViewer
 //
 //  Created by Kristian Angyal on 15/07/2016.
@@ -8,25 +8,26 @@
 
 import UIKit
 
-final class GalleryPagingDataSource: NSObject, UIPageViewControllerDataSource {
+final class GalleryPagingDatasource: NSObject, UIPageViewControllerDataSource {
 
     weak var itemControllerDelegate: ItemControllerDelegate?
-    fileprivate weak var itemsDataSource:          GalleryItemsDataSource?
-    fileprivate weak var displacedViewsDataSource: GalleryDisplacedViewsDataSource?
+    fileprivate weak var itemsDatasource: GalleryItemsDatasource?
+    fileprivate weak var displacedViewsDatasource: GalleryDisplacedViewsDatasource?
 
     fileprivate let configuration: GalleryConfiguration
     fileprivate var pagingMode = GalleryPagingMode.standard
-    fileprivate var itemCount: Int { return itemsDataSource?.itemCount() ?? 0 }
+    fileprivate let itemCount: Int
     fileprivate unowned var scrubber: VideoScrubber
 
-    init(itemsDataSource: GalleryItemsDataSource, displacedViewsDataSource: GalleryDisplacedViewsDataSource?, scrubber: VideoScrubber, configuration: GalleryConfiguration) {
+    init(itemsDatasource: GalleryItemsDatasource, displacedViewsDatasource: GalleryDisplacedViewsDatasource?, scrubber: VideoScrubber, configuration: GalleryConfiguration) {
 
-        self.itemsDataSource = itemsDataSource
-        self.displacedViewsDataSource = displacedViewsDataSource
+        self.itemsDatasource = itemsDatasource
+        self.displacedViewsDatasource = displacedViewsDatasource
         self.scrubber = scrubber
         self.configuration = configuration
+        self.itemCount = itemsDatasource.itemCount()
 
-        if itemsDataSource.itemCount() > 1 { // Potential carousel mode present in configuration only makes sense for more than 1 item
+        if itemCount > 1 { // Potential carousel mode present in configuration only makes sense for more than 1 item
 
             for item in configuration {
 
@@ -71,37 +72,28 @@ final class GalleryPagingDataSource: NSObject, UIPageViewControllerDataSource {
 
     func createItemController(_ itemIndex: Int, isInitial: Bool = false) -> UIViewController {
 
-        guard let itemsDataSource = itemsDataSource else { return UIViewController() }
+        guard let itemsDatasource = itemsDatasource else { return UIViewController() }
 
-        let item = itemsDataSource.provideGalleryItem(itemIndex)
+        let item = itemsDatasource.provideGalleryItem(itemIndex)
 
         switch item {
 
         case .image(let fetchImageBlock):
 
-            let imageController = ImageViewController(index: itemIndex, itemCount: itemsDataSource.itemCount(), fetchImageBlock: fetchImageBlock, configuration: configuration, isInitialController: isInitial)
+            let imageController = ImageViewController(index: itemIndex, itemCount: itemsDatasource.itemCount(), fetchImageBlock: fetchImageBlock, configuration: configuration, isInitialController: isInitial)
             imageController.delegate = itemControllerDelegate
-            imageController.displacedViewsDataSource = displacedViewsDataSource
+            imageController.displacedViewsDatasource = displacedViewsDatasource
 
             return imageController
 
         case .video(let fetchImageBlock, let videoURL):
 
-            let videoController = VideoViewController(index: itemIndex, itemCount: itemsDataSource.itemCount(), fetchImageBlock: fetchImageBlock, videoURL: videoURL, scrubber: scrubber, configuration: configuration, isInitialController: isInitial)
+            let videoController = VideoViewController(index: itemIndex, itemCount: itemsDatasource.itemCount(), fetchImageBlock: fetchImageBlock, videoURL: videoURL, scrubber: scrubber, configuration: configuration, isInitialController: isInitial)
 
             videoController.delegate = itemControllerDelegate
-            videoController.displacedViewsDataSource = displacedViewsDataSource
+            videoController.displacedViewsDatasource = displacedViewsDatasource
 
             return videoController
-
-        case .custom(let fetchImageBlock, let itemViewControllerBlock):
-
-            guard let itemController = itemViewControllerBlock(itemIndex, itemsDataSource.itemCount(), fetchImageBlock, configuration, isInitial) as? ItemController, let vc = itemController as? UIViewController else { return UIViewController() }
-
-            itemController.delegate = itemControllerDelegate
-            itemController.displacedViewsDataSource = displacedViewsDataSource
-
-            return vc
         }
     }
 }
